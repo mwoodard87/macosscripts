@@ -6,9 +6,137 @@
 
 #header
 echo
-echo "macOS User Transfer Utility v1.0"
+echo "macOS User Transfer Utility v1.01"
 echo "For IT Staff Only"
+echo
+echo "Release Notes"
+echo "1.01 - Added the function ThunderBoltTransfer"
 sleep 1
+
+function ThunderBoltTransfer {
+#header
+echo
+echo "ThunderBoltTransfer Utility v1.0"
+echo "Beginning User Backup Process"
+sleep 1
+
+#Show list of Users
+echo
+echo "This is a current list of users on this machine"
+ls -lh /Users
+sleep 2
+
+#Username Prompt
+echo
+echo "Please input the username of the User you are going to copy"
+read user_to_copy
+echo "You entered: $user_to_copy"
+
+#Show User Folder Size
+echo
+sleep 1
+echo "Calculating Home Folder Size. Please Wait.."
+du -hs /Users/$user_to_copy
+
+#Prompt for partition on the other computer to copy data to
+echo
+sleep 1
+echo "Please enter the name of the partition from the computer we are transfering to."
+echo "This should not have spaces in it. If it does use proper UNIX formatting"
+read partition_name
+echo "You entered: $partition_name"
+
+#Show remaining space on other computer
+echo
+echo "The other computer has the following amount of free space left."
+FreeSpace=$(diskutil info /Volumes/$partition_name | awk '/Volume Free Space/')
+FreeSpaceSierra=$(diskutil info /Volumes/$partition_name | awk '/Volume Available Space/')
+echo
+if [ -z "$FreeSpace" ]
+then
+    echo $FreeSpaceSierra
+else
+    echo $FreeSpace
+fi
+
+#Check to see if other computer is mounted
+echo
+echo "Checking to see if other computer is mounted"
+if [ -d "/Volumes/$partition_name" ]
+then
+	echo "External Drive Detected"
+else
+	echo "External Drive is not detected. Prompting user to abort. Continuing past warning could yield unexpected results!"
+	select yn in "Abort Script" "Continue"; do
+		case $yn in
+			'Abort Script' ) echo "Aborting Script"; exit;;
+			Continue ) break;;
+		esac
+	done
+fi
+
+#Check to see if a backup exists on the backup drive
+echo
+echo "Checking to see if a previous user backup exists"
+if [ -d "/Volumes/$partition_name/Users/$user_to_copy" ]
+then
+    echo "An existing user folder was found on the transfer machine."
+
+#Prompt to empty trash
+echo
+echo "Do you wish to empty the trash?"
+select yn in "Yes" "No"; do
+    case $yn in
+        Yes ) echo "The trash for $user_to_copy has been emptied."; rm -rf /Users/$user_to_copy/.Trash/*; break;;
+        No ) break;;
+    esac
+done
+
+#Prompt to empty Downloads
+echo
+echo "Do you wish to empty the downloads folder?"
+select yn in "Yes" "No"; do
+    case $yn in
+        Yes ) echo "The downloads for $user_to_copy have been cleared."; rm -rf /Users/$user_to_copy/Downloads/*; break;;
+        No ) break;;
+    esac
+done
+
+#Command confirm
+echo
+echo "Are you sure you wish to backup this machine?"
+select yn in "Yes" "No"; do
+    case $yn in
+        Yes ) echo "The backup process is now underway."; /usr/bin/ditto -V -rsrcFork /Users/$user_to_copy /Volumes/$partition_name/Users/$user_to_copy; fi; break;;
+	     No ) echo "The backup process has been cancelled."; exit;;
+    esac
+done
+
+#Remove Keychain from Backup
+echo
+echo "Do you wish to remove the Keychains from the User Folder. ONLY DO THIS IF YOU FEEL THE USER FOLDER IS CORRUPTED."
+select yn in "Yes" "No"; do
+    case $yn in
+        Yes ) echo "Removing Keychains from Backup"; rm -rf /Volumes/$partition_name/Users/$user_to_copy/Library/Keychains/*; break;;
+        No ) break;;
+    esac
+done
+
+#Remove Microsoft Office Data Folder
+echo
+echo "Do You Wish to Remove the Microsoft Office Data Folder from Backup"
+echo "Only say NO if the user has groups stored on the local computer"
+select yn in "Yes" "No"; do
+    case $yn in
+        Yes ) echo "Removed the Microsoft Office Data Folder from Backup"; rm -rf /Volumes/$partition_name/Users/$user_to_copy/Documents/Microsoft\ Office\ Data/; break;;
+        No ) break;;
+    esac
+done
+
+#Inform User Backup is Complete
+echo
+echo "The Backup process for the user $user_to_copy has been completed to $partition_name"
+}
 
 function UserBackup {
 #header
@@ -242,8 +370,9 @@ do 	case "$option" in
 	b)	UserBackup;;
 	f)  FixPermissions;;
     r)	UserRestore;;
+    t) ThunderBoltTransfer;;
     T)  ;;
-	[?])	echo >&2 "Usage: $0 [-b UserBackup] [-f FixPermissions] [-r UserRestore] "
+	[?])	echo >&2 "Usage: $0 [-b UserBackup] [-f FixPermissions] [-r UserRestore] [-t ThunderBoltTransfer]"
 		exit 1;;
 	esac
 done
@@ -258,6 +387,7 @@ echo ""
 echo "-b User Backup"
 echo "-f Fix Permissions"
 echo "-r User Restore"
+echo "-t ThunderBolt Transfer"
 echo "*********************************"
 exit
 fi
